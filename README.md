@@ -11,4 +11,7 @@ You can directly download the model weights through the link: https://www.kaggle
 
 First, change the SegmentationModel function in othersModel.py to obtain other comparison models, and then run compare to obtain the comparison images of the predicted masks and ground truths of each model.
 
+<img width="795" height="545" alt="image" src="https://github.com/user-attachments/assets/3f2b8100-bc74-48e0-a852-f934058d8c26" />
+
+
 Code will be released gradually
