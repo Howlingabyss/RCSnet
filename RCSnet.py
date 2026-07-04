@@ -14,16 +14,16 @@ from torch.utils.data import Dataset
 import os
 import random
 def set_seed(seed):
-    random.seed(seed)  # 设置 Python 的随机种子
-    np.random.seed(seed)  # 设置 NumPy 的随机种子
-    torch.manual_seed(seed)  # 设置 PyTorch 的随机种子
-    torch.cuda.manual_seed(seed)  # 设置 GPU 上的随机种子
-    torch.cuda.manual_seed_all(seed)  # 如果使用多个 GPU，设置所有 GPU 的随机种子
-    torch.backends.cudnn.deterministic = True  # 确保每次卷积操作的结果是确定的
-    torch.backends.cudnn.benchmark = False  # 禁用 cuDNN 的自动优化
+    random.seed(seed)  
+    np.random.seed(seed)  
+    torch.manual_seed(seed) 
+    torch.cuda.manual_seed(seed)  
+    torch.cuda.manual_seed_all(seed)  
+    torch.backends.cudnn.deterministic = True  
+    torch.backends.cudnn.benchmark = False  
 
-# 在项目的开头调用
-set_seed(42)  # 42 是一个常用的随机种子值，你可以根据需要更改
+
+set_seed(42)  
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
@@ -36,9 +36,13 @@ DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # Define hyperparameters
 EPOCHS = 150        # number of epochs
-LR = 0.05         # Learning rate
+LR = 0.001         # Learning rate
 IMG_SIZE = 512     # Size of image
 BATCH_SIZE = 8   # Batch size
+
+# # Define pretrained encoder model and weights
+# ENCODER = 'timm-efficientnet-b0'
+# WEIGHTS = 'imagenet'
 
 df = pd.read_csv(TRAIN_DATA_PATH)
 
@@ -80,11 +84,20 @@ class SegmentationDataset(Dataset):
         mask = cv2.imread(mask, cv2.IMREAD_GRAYSCALE)
         mask = np.expand_dims(mask, axis=-1)
 
+        # print(f"Shapes of images before augmentation: {image.shape}")
+        # print(f"Shapes of masks before augmentation: {mask.shape}")
+
         # Apply augmentations
         if self.augs:
             data = self.augs(image=image, mask=mask)
             image = data['image']
             mask = data['mask']
+
+        # print(f"\nShapes of images after augmentation: {image.shape}")
+        # print(f"Shapes of masks after augmentation: {mask.shape}")
+        # print(torch.tensor(image))
+        # Transpose image dimensions in pytorch format
+        # (H,W,C) -> (C,H,W)
         image = np.transpose(image, (2, 0, 1)).astype(np.float32)
         mask = np.transpose(mask, (2, 0, 1)).astype(np.float32)
 
@@ -100,26 +113,34 @@ train_data = SegmentationDataset(train_df, get_train_augs())
 val_data = SegmentationDataset(val_df, get_val_augs())
 
 #MODEL
-from RCSnet.vit_seg_modeling import VisionTransformer as RCSNet
-from RCS.vit_seg_modeling import CONFIGS as CONFIGS_ViT_seg
+from TransUnet.vit_seg_modeling import VisionTransformer as TransUNet
+from TransUnet.vit_seg_modeling import CONFIGS as CONFIGS_ViT_seg
 
 config_transunet = CONFIGS_ViT_seg['R50-ViT-B_16']
 input_size = 512
 config_transunet.n_classes = 1
 config_transunet.n_skip = 3
 config_transunet.patches.grid = (int(input_size / 16), int(input_size / 16))
-model = RCSNet(config_transunet, input_size, num_classes=1).cuda() ## TransUnet model
+model = TransUNet(config_transunet, input_size, num_classes=1).cuda() ## TransUnet model
 model.to(DEVICE)
 
+#Unet
+# from TransUnet.vit_seg_modeling import UNet
+# model = UNet(in_channels=3, out_channels=1).to(DEVICE)
 
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+
+
 
 trainloader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
 valloader = DataLoader(val_data, batch_size=BATCH_SIZE, shuffle=True)
 
 
+
+
 # # Function to train the model
+
 loss_function = nn.BCEWithLogitsLoss()
 
 def train_model(data_loader, model, optimizer):
@@ -164,11 +185,11 @@ def eval_model(data_loader, model):
 import os
 import psutil
 optimizer = torch.optim.Adam(model.parameters(), lr=LR)
-save_dir = './sensitivity'
+save_dir = './BestModel150epochs512/batch_size'
 if not os.path.exists(save_dir):
     os.makedirs(save_dir)
 
-# 初始化列表保存每个 epoch 的损失
+
 train_losses = []
 val_losses = []
 
@@ -178,8 +199,8 @@ for i in range(EPOCHS):
     train_loss = train_model(trainloader, model, optimizer)
     val_loss = eval_model(valloader, model)
 
-    train_losses.append(train_loss)  # 保存训练损失
-    val_losses.append(val_loss)      # 保存验证损失
+    train_losses.append(train_loss)  
+    val_losses.append(val_loss)      
 
     # 保存损失到文件
     loss_data = pd.DataFrame({
@@ -187,16 +208,17 @@ for i in range(EPOCHS):
         'Train Loss': train_losses,
         'Validation Loss': val_losses
     })
-    loss_data.to_csv('loss_ema_feat2_0.05.csv', index=False)  # 保存为 CSV 文件
+    loss_data.to_csv('loss_ema_feat_b4.csv', index=False)  
 
     if val_loss < best_val_loss:
         # Save the best model
-        torch.save(model.state_dict(), os.path.join(save_dir, 'ema_feat2_0.05.pt'))
+        torch.save(model.state_dict(), os.path.join(save_dir, 'best_model_batch_b8.pt'))
         print("MODEL SAVED")
 
         best_val_loss = val_loss
 
     print(f"\033[1m\033[92m Epoch {i + 1} Train Loss {train_loss} Val Loss {val_loss}")
+
 
 
 
